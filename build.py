@@ -305,7 +305,8 @@ def og_html(top, now, total, nsrc):
 
 
 def og_filename(now):
-    return f"og-{now.strftime('%Y-%m-%d')}.png"
+    # 빌드 시각까지 파일명에 포함 → 빌드마다 URL이 달라져 SNS 이미지 CDN 캐시를 확실히 우회
+    return f"og-{now.strftime('%Y-%m-%d-%H%M%S')}.png"
 
 
 def generate_og(top, now, total, nsrc):
