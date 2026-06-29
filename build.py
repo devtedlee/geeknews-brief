@@ -304,18 +304,29 @@ def og_html(top, now, total, nsrc):
             f'<div class="f">오늘 {nsrc}개 소스 · 총 {total}건</div></body>')
 
 
+def og_filename(now):
+    return f"og-{now.strftime('%Y-%m-%d')}.png"
+
+
 def generate_og(top, now, total, nsrc):
-    """OG 카드 HTML → og.png (1200×630, 2x). Chrome 없으면 건너뜀."""
+    """OG 카드 HTML → og-YYYY-MM-DD.png (1200×630, 2x). Chrome 없으면 건너뜀."""
     ogh = os.path.join(HERE, "og.html")
     with open(ogh, "w", encoding="utf-8") as f:
         f.write(og_html(top, now, total, nsrc))
+    name = og_filename(now)
+    for f in os.listdir(HERE):          # 지난 날짜 og 파일 정리 (오늘 것만 유지)
+        if f.startswith("og-") and f.endswith(".png") and f != name:
+            try:
+                os.remove(os.path.join(HERE, f))
+            except OSError:
+                pass
     chrome = find_chrome()
     if not chrome:
-        print("[warn] Chrome 미발견 — og.png 생략", file=sys.stderr)
+        print(f"[warn] Chrome 미발견 — {name} 생략", file=sys.stderr)
         return
-    png = os.path.join(HERE, "og.png")
+    png = os.path.join(HERE, name)
     args = ["--screenshot=" + png, "--window-size=1200,630", "--hide-scrollbars", "--force-device-scale-factor=2"]
-    print(f"OG: {png}" if chrome_capture(chrome, png, args, "file://" + ogh) else "[warn] og.png 생성 실패")
+    print(f"OG: {png}" if chrome_capture(chrome, png, args, "file://" + ogh) else f"[warn] {name} 생성 실패")
 
 
 def export_assets(top, now):
@@ -401,19 +412,20 @@ def render(sources, now, total, translated_count):
            + tabcss)
 
     site = os.environ.get("SITE_URL", "https://devtedlee.github.io/geeknews-brief").rstrip("/")
+    ogimg = f"{site}/{og_filename(now)}"   # 날짜 파일명 → 매일 URL이 달라 SNS 캐시 우회
     ogdesc = f"오늘 {len(sources)}개 소스 · 총 {total}건" + (
         " — " + " / ".join(it["disp_title"] for it in top[:2]) if top else "")
     ogmeta = (f'<meta property="og:type" content="website"/>'
               f'<meta property="og:title" content="Developer Morning Brief"/>'
               f'<meta property="og:description" content="{esc(ogdesc)}"/>'
               f'<meta property="og:url" content="{site}/"/>'
-              f'<meta property="og:image" content="{site}/og.png"/>'
+              f'<meta property="og:image" content="{ogimg}"/>'
               f'<meta property="og:image:width" content="2400"/>'
               f'<meta property="og:image:height" content="1260"/>'
               f'<meta name="twitter:card" content="summary_large_image"/>'
               f'<meta name="twitter:title" content="Developer Morning Brief"/>'
               f'<meta name="twitter:description" content="{esc(ogdesc)}"/>'
-              f'<meta name="twitter:image" content="{site}/og.png"/>')
+              f'<meta name="twitter:image" content="{ogimg}"/>')
     return (f'<!doctype html><html lang="ko"><head><meta charset="utf-8"/>'
             f'<meta name="viewport" content="width=device-width, initial-scale=1"/>'
             f'<title>Developer Morning Brief</title>{ogmeta}<style>{css}</style></head><body><div class="wrap">'
