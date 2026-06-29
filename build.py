@@ -419,7 +419,6 @@ def render(sources, now, total, translated_count):
     ogmeta = (f'<meta property="og:type" content="website"/>'
               f'<meta property="og:title" content="Developer Morning Brief"/>'
               f'<meta property="og:description" content="{esc(ogdesc)}"/>'
-              f'<meta property="og:url" content="{site}/"/>'
               f'<meta property="og:image" content="{ogimg}"/>'
               f'<meta property="og:image:width" content="2400"/>'
               f'<meta property="og:image:height" content="1260"/>'
