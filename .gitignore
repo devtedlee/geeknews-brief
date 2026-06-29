@@ -1,0 +1,13 @@
+# 비밀: 절대 커밋 금지
+.env
+
+# 로컬 산출물 (Pages엔 index.html만 필요)
+*.log
+__pycache__/
+geeknews-daily-brief.html
+geeknews-brief.txt
+geeknews-brief-share.html
+geeknews-brief.pdf
+geeknews-brief.png
+test.pdf
+t_old.pdf
