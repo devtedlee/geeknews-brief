@@ -244,10 +244,78 @@ def find_chrome():
     for p in ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
               "/Applications/Chromium.app/Contents/MacOS/Chromium",
               "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-              "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"):
+              "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+              "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable",      # Linux (GitHub 러너 포함)
+              "/usr/bin/chromium-browser", "/usr/bin/chromium"):
         if os.path.exists(p):
             return p
     return None
+
+
+def chrome_capture(chrome, out_file, out_args, url, wait=25):
+    """Chrome 헤드리스로 파일 생성. 작업 후 종료 안 하는 경우가 있어 파일이 생기면 직접 종료."""
+    base = [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+            "--disable-extensions", "--disable-background-networking",
+            f"--user-data-dir={tempfile.mkdtemp()}"]
+    if os.path.exists(out_file):
+        os.remove(out_file)
+    p = subprocess.Popen(base + out_args + [url], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    ok = False
+    for _ in range(wait * 10):
+        if os.path.exists(out_file) and os.path.getsize(out_file) > 0:
+            ok = True
+            break
+        if p.poll() is not None:
+            break
+        time.sleep(0.1)
+    time.sleep(0.5)  # 마무리 쓰기 여유
+    try:
+        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+        p.wait(timeout=5)
+    except Exception:
+        try:
+            os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except Exception:
+            pass
+    return ok and os.path.exists(out_file) and os.path.getsize(out_file) > 0
+
+
+def og_html(top, now, total, nsrc):
+    """1200×630 OG 미리보기 카드 (이모지 없이 — 리눅스 폰트 호환)."""
+    items = ""
+    for it in top[:3]:
+        badge = f'<span class="b">▲{it["points"]}</span>' if it.get("points") else ""
+        items += (f'<div class="i"><span class="src">{esc(it["src"])}</span>{badge}'
+                  f'<div class="t">{esc(it["disp_title"])}</div></div>')
+    return ('<!doctype html><meta charset="utf-8"><style>'
+            'html,body{margin:0}body{position:relative;width:1200px;height:630px;box-sizing:border-box;'
+            "padding:64px 72px;background:linear-gradient(135deg,#eef4ff,#f7f7f3);color:#1f2937;"
+            "font-family:-apple-system,'Apple SD Gothic Neo','Noto Sans CJK KR','Segoe UI',sans-serif;overflow:hidden}"
+            '.h{font-size:58px;font-weight:800;letter-spacing:-.02em;margin:0}'
+            '.d{color:#2563eb;font-size:24px;font-weight:700;margin:8px 0 30px}'
+            '.i{margin:0 0 18px}.src{font-size:16px;color:#6b7280;font-weight:700}'
+            '.b{font-size:16px;color:#2563eb;margin-left:8px;font-weight:700}'
+            '.t{font-size:30px;font-weight:700;line-height:1.3;margin-top:2px;'
+            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+            '.f{position:absolute;bottom:48px;left:72px;color:#6b7280;font-size:20px}'
+            f'</style><body><p class="h">Developer Morning Brief</p>'
+            f'<p class="d">{now.strftime("%Y-%m-%d")} · Asia/Seoul</p>{items}'
+            f'<div class="f">오늘 {nsrc}개 소스 · 총 {total}건</div></body>')
+
+
+def generate_og(top, now, total, nsrc):
+    """OG 카드 HTML → og.png (1200×630, 2x). Chrome 없으면 건너뜀."""
+    ogh = os.path.join(HERE, "og.html")
+    with open(ogh, "w", encoding="utf-8") as f:
+        f.write(og_html(top, now, total, nsrc))
+    chrome = find_chrome()
+    if not chrome:
+        print("[warn] Chrome 미발견 — og.png 생략", file=sys.stderr)
+        return
+    png = os.path.join(HERE, "og.png")
+    args = ["--screenshot=" + png, "--window-size=1200,630", "--hide-scrollbars", "--force-device-scale-factor=2"]
+    print(f"OG: {png}" if chrome_capture(chrome, png, args, "file://" + ogh) else "[warn] og.png 생성 실패")
 
 
 def export_assets(top, now):
@@ -262,40 +330,11 @@ def export_assets(top, now):
     pdf = os.path.join(HERE, "geeknews-brief.pdf")
     png = os.path.join(HERE, "geeknews-brief.png")
     url = "file://" + sh
-
-    def chrome_render(out_args, out_file, wait=25):
-        # Chrome는 파일을 쓴 뒤에도 종료하지 않는 경우가 있어, 파일이 생기면 직접 종료시킨다.
-        base = [chrome, "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                "--disable-extensions", "--disable-background-networking",
-                f"--user-data-dir={tempfile.mkdtemp()}"]
-        if os.path.exists(out_file):
-            os.remove(out_file)
-        p = subprocess.Popen(base + out_args + [url], stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
-        ok = False
-        for _ in range(wait * 10):
-            if os.path.exists(out_file) and os.path.getsize(out_file) > 0:
-                ok = True
-                break
-            if p.poll() is not None:
-                break
-            time.sleep(0.1)
-        time.sleep(0.5)  # 마무리 쓰기 여유
-        try:
-            os.killpg(os.getpgid(p.pid), signal.SIGTERM)
-            p.wait(timeout=5)
-        except Exception:
-            try:
-                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-            except Exception:
-                pass
-        return ok and os.path.getsize(out_file) > 0
-
     got = []
-    if chrome_render([f"--print-to-pdf={pdf}", "--no-pdf-header-footer"], pdf):
+    if chrome_capture(chrome, pdf, [f"--print-to-pdf={pdf}", "--no-pdf-header-footer"], url):
         got.append(f"PDF: {pdf}")
-    if chrome_render([f"--screenshot={png}", "--window-size=760,2400", "--hide-scrollbars",
-                      "--force-device-scale-factor=2"], png):
+    if chrome_capture(chrome, png, [f"--screenshot={png}", "--window-size=760,2400", "--hide-scrollbars",
+                                    "--force-device-scale-factor=2"], url):
         got.append(f"PNG: {png}")
     print("\n".join(got) if got else "[warn] PDF/PNG 내보내기 실패")
 
@@ -361,9 +400,23 @@ def render(sources, now, total, translated_count):
            "@media (max-width:900px){.wrap{padding:18px 14px 40px}.grid{grid-template-columns:1fr}h1{font-size:30px}.title{font-size:18px}}"
            + tabcss)
 
+    site = os.environ.get("SITE_URL", "https://devtedlee.github.io/geeknews-brief").rstrip("/")
+    ogdesc = f"오늘 {len(sources)}개 소스 · 총 {total}건" + (
+        " — " + " / ".join(it["disp_title"] for it in top[:2]) if top else "")
+    ogmeta = (f'<meta property="og:type" content="website"/>'
+              f'<meta property="og:title" content="Developer Morning Brief"/>'
+              f'<meta property="og:description" content="{esc(ogdesc)}"/>'
+              f'<meta property="og:url" content="{site}/"/>'
+              f'<meta property="og:image" content="{site}/og.png"/>'
+              f'<meta property="og:image:width" content="2400"/>'
+              f'<meta property="og:image:height" content="1260"/>'
+              f'<meta name="twitter:card" content="summary_large_image"/>'
+              f'<meta name="twitter:title" content="Developer Morning Brief"/>'
+              f'<meta name="twitter:description" content="{esc(ogdesc)}"/>'
+              f'<meta name="twitter:image" content="{site}/og.png"/>')
     return (f'<!doctype html><html lang="ko"><head><meta charset="utf-8"/>'
             f'<meta name="viewport" content="width=device-width, initial-scale=1"/>'
-            f'<title>Developer Morning Brief</title><style>{css}</style></head><body><div class="wrap">'
+            f'<title>Developer Morning Brief</title>{ogmeta}<style>{css}</style></head><body><div class="wrap">'
             f'<section class="hero"><h1>Developer Morning Brief</h1>'
             f'<div class="desc">{now.strftime("%Y년 %m월 %d일 %H:%M")} (Asia/Seoul) 기준</div>'
             f'<div class="briefing"><p>{esc(b1)}</p><p>{esc(b2)}</p><p>{b3}</p></div>'
@@ -433,8 +486,12 @@ def build():
     txt_path = os.path.join(HERE, "geeknews-brief.txt")
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write(txt)
-    print(f"OK: {OUT} | 소스 {len([s for s in sources if s[1]])}개, 총 {total}건, 번역 {tcount}건")
+    nsrc = len([s for s in sources if s[1]])
+    print(f"OK: {OUT} | 소스 {nsrc}개, 총 {total}건, 번역 {tcount}건")
     print(f"공유텍스트: {txt_path} (상위 {len(top)}건)")
+
+    # OG 미리보기 이미지 (Chrome 있으면 항상 생성 → Pages 배포에 포함)
+    generate_og(top, now, total, nsrc)
 
     # PDF/PNG 내보내기: --export 플래그 또는 EXPORT=1 일 때만
     if "--export" in sys.argv or os.environ.get("EXPORT") == "1":
