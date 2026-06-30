@@ -35,8 +35,8 @@ UA = {"User-Agent": "Mozilla/5.0 (geeknews-brief)"}
 FEEDS = [
     ("GeekNews",            "https://news.hada.io/rss/news",        False, 15),
     ("Hacker News",         "https://hnrss.org/frontpage",          True,  12),
-    ("Lobsters",            "https://lobste.rs/rss",                True,  8),
-    ("Dev.to",              "https://dev.to/feed",                  True,  8),
+    ("Lobsters",            "https://lobste.rs/hottest.json",       True,  8),
+    ("Dev.to",              "https://dev.to/api/articles?top=1",    True,  8),
 ]
 
 
@@ -145,6 +145,42 @@ def fetch_geeknews(limit_html=40):
         if len(items) >= limit_html:
             break
     return items
+
+
+def fetch_lobsters(pool=25):
+    """Lobsters hottest.json — RSS엔 없는 점수(score)·댓글(comment_count) 포함."""
+    data = json.loads(fetch("https://lobste.rs/hottest.json"))
+    items = []
+    for s in data[:pool]:
+        items.append({
+            "title": html.unescape(s.get("title", "")),
+            "link": s.get("url") or s.get("comments_url", ""),
+            "summary": clean_text(s.get("description", "")),
+            "points": int(s.get("score", 0) or 0),
+            "comments": int(s.get("comment_count", 0) or 0),
+            "date": parse_date(s.get("created_at", "")),
+        })
+    return items
+
+
+def fetch_devto(pool=25):
+    """Dev.to API(top=1, 최근 1일 인기) — 반응(public_reactions_count)·댓글(comments_count) 포함."""
+    data = json.loads(fetch(f"https://dev.to/api/articles?top=1&per_page={pool}"))
+    items = []
+    for a in data:
+        items.append({
+            "title": html.unescape(a.get("title", "")),
+            "link": a.get("url", ""),
+            "summary": clean_text(a.get("description", "")),
+            "points": int(a.get("public_reactions_count", 0) or 0),
+            "comments": int(a.get("comments_count", 0) or 0),
+            "date": parse_date(a.get("published_at", "")),
+        })
+    return items
+
+
+# 라벨 -> 전용 페처(점수·댓글 포함). 없으면 RSS/Atom(parse_feed)로 폴백.
+FETCHERS = {"GeekNews": fetch_geeknews, "Lobsters": fetch_lobsters, "Dev.to": fetch_devto}
 
 
 def is_excluded(label, title):
@@ -478,7 +514,8 @@ def build():
     seen, sources, total = set(), [], 0
     for lbl, url, is_en, limit in FEEDS:
         try:
-            items = fetch_geeknews() if lbl == "GeekNews" else parse_feed(fetch(url))
+            fn = FETCHERS.get(lbl)
+            items = fn() if fn else parse_feed(fetch(url))
         except Exception as e:
             print(f"[warn] {lbl} 수집 실패: {e}", file=sys.stderr)
             continue
