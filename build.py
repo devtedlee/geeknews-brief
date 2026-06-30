@@ -7,6 +7,7 @@
 """
 import html, json, os, re, signal, subprocess, sys, tempfile, time, urllib.request, urllib.error
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,8 +35,8 @@ UA = {"User-Agent": "Mozilla/5.0 (geeknews-brief)"}
 FEEDS = [
     ("GeekNews",            "https://news.hada.io/rss/news",        False, 15),
     ("Hacker News",         "https://hnrss.org/frontpage",          True,  12),
-    ("Cloudflare Blog",     "https://blog.cloudflare.com/rss/",     True,  6),
-    ("GitHub Engineering",  "https://github.blog/engineering.atom", True,  6),
+    ("Lobsters",            "https://lobste.rs/rss",                True,  8),
+    ("Dev.to",              "https://dev.to/feed",                  True,  8),
 ]
 
 
@@ -69,6 +70,7 @@ def parse_feed(raw):
     entries = [e for e in nodes if strip_ns(e.tag) in ("item", "entry")]
     for e in entries:
         title = link = summary = ""
+        pub = upd = ""
         points = comments = 0
         for c in e:
             t = strip_ns(c.tag)
@@ -77,6 +79,10 @@ def parse_feed(raw):
             elif t == "link":
                 # RSS: text / Atom: href 속성
                 link = (c.text or "").strip() or c.get("href", "")
+            elif t in ("pubDate", "published"):
+                pub = c.text or ""
+            elif t == "updated":
+                upd = c.text or ""
             elif t in ("description", "summary", "content") and not summary:
                 raw = c.text or ""
                 mp = re.search(r"Points?:\s*(\d+)", raw)        # HN: 추천 점수 (clean 전 캡처)
@@ -87,12 +93,36 @@ def parse_feed(raw):
                     comments = int(mc.group(1))
                 summary = clean_text(raw)
         items.append({"title": html.unescape(title), "link": link, "summary": summary,
-                      "points": points, "comments": comments})
+                      "points": points, "comments": comments, "date": parse_date(pub or upd)})
     return items
 
 
+MAX_AGE_DAYS = int(os.environ.get("MAX_AGE_DAYS", "3"))
+
+
+def parse_date(s):
+    """RSS(RFC822) / Atom·GeekNews(ISO8601) 발행일 문자열 -> date. 실패 시 None(보존)."""
+    if not s:
+        return None
+    s = s.strip()
+    try:
+        return parsedate_to_datetime(s).date()
+    except (TypeError, ValueError, IndexError):
+        pass
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def too_old(d, today):
+    """발행일이 MAX_AGE_DAYS 초과면 True. 날짜 미상(None)은 보존."""
+    return d is not None and (today - d).days > MAX_AGE_DAYS
+
+
 def fetch_geeknews(limit_html=40):
-    """GeekNews 홈페이지를 스크래핑해 점수·댓글 포함 항목 반환 (RSS엔 점수가 없음)."""
+    """GeekNews 홈페이지를 스크래핑해 점수·댓글 포함 항목 반환 (RSS엔 점수가 없음).
+    홈은 날짜순이 아닌 인기순이라 오래된 글이 며칠씩 남으므로 발행일(date)을 함께 반환한다."""
     h = fetch("https://news.hada.io/").decode("utf-8", "replace")
     items = []
     for p in re.split(r"<div class=topictitle>", h)[1:]:
@@ -100,6 +130,7 @@ def fetch_geeknews(limit_html=40):
         title = re.search(r"topic-title-heading'>(.*?)</h2>", p, re.S)
         if not (tid and title):
             continue
+        date = re.search(r'data-date="(\d{4}-\d{2}-\d{2})"', p)
         desc = re.search(r"topicdesc'><a[^>]*>(.*?)</a>", p, re.S)
         pts = re.search(r"id='tp\d+'>(\d+)</span>\s*point", p)
         cmt = re.search(r"data-topic-comment-count='(\d+)'", p)
@@ -109,6 +140,7 @@ def fetch_geeknews(limit_html=40):
             "summary": clean_text(desc.group(1)) if desc else "",
             "points": int(pts.group(1)) if pts else 0,
             "comments": int(cmt.group(1)) if cmt else 0,
+            "date": parse_date(date.group(1)) if date else None,
         })
         if len(items) >= limit_html:
             break
@@ -442,6 +474,7 @@ def render(sources, now, total, translated_count):
 
 def build():
     now = datetime.now(KST)
+    today = now.date()
     seen, sources, total = set(), [], 0
     for lbl, url, is_en, limit in FEEDS:
         try:
@@ -452,6 +485,8 @@ def build():
         kept = []
         for it in items:
             if not it["title"] or is_excluded(lbl, it["title"]):
+                continue
+            if too_old(it.get("date"), today):     # 모든 소스 공통: 오래된 글 제외
                 continue
             k = norm(it["title"])
             if k in seen:
@@ -525,6 +560,16 @@ def selftest():
     hn = clean_text("Big news<p>Article URL: http://x Comments URL: http://y Points: 10 # Comments: 3</p>")
     assert "Article URL" not in hn and "Big news" in hn, hn
     assert norm("Hello, World!") == "helloworld"
+    # 발행일 파싱(RSS/Atom/GeekNews) + 공통 필터: 오래된 글 제외, 미상은 보존
+    from datetime import date as _date
+    t = _date(2026, 6, 30)
+    assert parse_date("Mon, 25 Jun 2026 08:15:52 -0500") == _date(2026, 6, 25)
+    assert parse_date("2026-06-30T02:04:55+00:00") == t
+    assert parse_date("2026-06-30T02:04:55Z") == t
+    assert parse_date("2026-06-25") == _date(2026, 6, 25)   # GeekNews data-date
+    assert parse_date("garbage") is None
+    assert too_old(_date(2026, 6, 25), t) and not too_old(t, t)
+    assert not too_old(None, t)                              # 날짜 미상은 보존
     # 점수 파싱
     hnfeed = b"""<rss><channel>
       <item><title>Low</title><link>l</link><description>Points: 5 # Comments: 1</description></item>
