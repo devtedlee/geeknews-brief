@@ -496,6 +496,7 @@ def render(sources, now, total, translated_count):
               f'<meta name="twitter:image" content="{ogimg}"/>')
     return (f'<!doctype html><html lang="ko"><head><meta charset="utf-8"/>'
             f'<meta name="viewport" content="width=device-width, initial-scale=1"/>'
+            f'<link rel="icon" href="favicon.ico"/>'
             f'<title>Developer Morning Brief</title>{ogmeta}<style>{css}</style>'
             f'<script defer src="https://static.cloudflareinsights.com/beacon.min.js" '
             f'data-cf-beacon=\'{{"token": "416a4aded1914f4885983f784d7bec54"}}\'></script>'
