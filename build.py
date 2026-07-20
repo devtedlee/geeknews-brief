@@ -69,7 +69,7 @@ def parse_feed(raw):
     nodes = root.iter()
     entries = [e for e in nodes if strip_ns(e.tag) in ("item", "entry")]
     for e in entries:
-        title = link = summary = ""
+        title = link = summary = comments_url = ""
         pub = upd = ""
         points = comments = 0
         for c in e:
@@ -79,6 +79,9 @@ def parse_feed(raw):
             elif t == "link":
                 # RSS: text / Atom: href 속성
                 link = (c.text or "").strip() or c.get("href", "")
+            elif t == "comments":
+                # hnrss: <link>는 원본 기사, <comments>가 실제 토론 페이지
+                comments_url = (c.text or "").strip()
             elif t in ("pubDate", "published"):
                 pub = c.text or ""
             elif t == "updated":
@@ -92,7 +95,7 @@ def parse_feed(raw):
                 if mc:
                     comments = int(mc.group(1))
                 summary = clean_text(raw)
-        items.append({"title": html.unescape(title), "link": link, "summary": summary,
+        items.append({"title": html.unescape(title), "link": comments_url or link, "summary": summary,
                       "points": points, "comments": comments, "date": parse_date(pub or upd)})
     return items
 
@@ -598,6 +601,11 @@ def selftest():
     atom = b'<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>T</title><link href="http://c"/><summary>s</summary></entry></feed>'
     a = parse_feed(atom)
     assert a[0]["link"] == "http://c", a
+    # HN: <comments>가 있으면 원문(<link>) 대신 토론 페이지로 링크
+    hn_link = parse_feed(b"<rss><channel><item><title>T</title><link>http://article</link>"
+                          b"<comments>http://news.ycombinator.com/item?id=1</comments>"
+                          b"<description>d</description></item></channel></rss>")
+    assert hn_link[0]["link"] == "http://news.ycombinator.com/item?id=1", hn_link
     hn = clean_text("Big news<p>Article URL: http://x Comments URL: http://y Points: 10 # Comments: 3</p>")
     assert "Article URL" not in hn and "Big news" in hn, hn
     assert norm("Hello, World!") == "helloworld"
