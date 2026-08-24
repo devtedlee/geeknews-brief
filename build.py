@@ -29,7 +29,7 @@ def load_env():
 
 load_env()
 KST = timezone(timedelta(hours=9))
-UA = {"User-Agent": "Mozilla/5.0 (geeknews-brief)"}
+UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"}
 
 # (라벨, URL, 영어여부, 최대항목수)
 FEEDS = [
@@ -124,8 +124,7 @@ def too_old(d, today):
 
 
 def fetch_geeknews(limit_html=40):
-    """GeekNews 홈페이지를 스크래핑해 점수·댓글 포함 항목 반환 (RSS엔 점수가 없음).
-    홈은 날짜순이 아닌 인기순이라 오래된 글이 며칠씩 남으므로 발행일(date)을 함께 반환한다."""
+    """GeekNews 홈페이지를 스크래핑해 점수·댓글 포함 항목 반환."""
     h = fetch("https://news.hada.io/").decode("utf-8", "replace")
     items = []
     for p in re.split(r"<div class=topictitle>", h)[1:]:
