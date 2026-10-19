@@ -9,6 +9,7 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write   # keepalive: 워크플로 enable API 호출용
 
 concurrency:
   group: pages
@@ -21,6 +22,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Keepalive   # 60일 무활동 시 cron 비활성화 방지 (enable 호출로 타이머 리셋)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable build.yml -R ${{ github.repository }}
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
