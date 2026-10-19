@@ -37,6 +37,7 @@ jobs:
           cp index.html _site/index.html
           cp og-*.png _site/
           cp favicon.ico _site/
+          cp logo.svg _site/
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

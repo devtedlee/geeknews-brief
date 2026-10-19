@@ -469,7 +469,7 @@ def render(sources, now, total, translated_count):
 
     css = (":root{--bg:#f7f7f3;--paper:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;--soft:#eef4ff;--tag:#f3f4f6}"
            "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Segoe UI',sans-serif;line-height:1.6}"
-           ".wrap{max-width:1120px;margin:0 auto;padding:32px 20px 60px}.hero,.panel{background:var(--paper);border:1px solid var(--line);border-radius:20px}.hero{padding:28px}.panel{padding:24px}"
+           ".logo{width:1.4em;height:1.4em;vertical-align:-.3em;margin-right:10px}.wrap{max-width:1120px;margin:0 auto;padding:32px 20px 60px}.hero,.panel{background:var(--paper);border:1px solid var(--line);border-radius:20px}.hero{padding:28px}.panel{padding:24px}"
            ".section{margin-top:22px}.grid{display:grid;grid-template-columns:1.3fr .9fr;gap:20px}h1{margin:0 0 10px;font-size:38px;letter-spacing:-.02em}h2{margin:0 0 16px;font-size:24px}"
            ".desc,.meta,.foot,.orig-title{color:var(--muted)}.briefing{margin-top:18px;padding:16px 18px;background:var(--soft);border-radius:16px;color:#1e3a8a}.briefing p{margin:0 0 8px}.briefing p:last-child{margin-bottom:0}"
            ".chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.chip,.source-tag,.cat-name{display:inline-block;border-radius:999px}.chip{background:var(--tag);border:1px solid var(--line);padding:8px 12px;font-size:14px}"
@@ -503,7 +503,7 @@ def render(sources, now, total, translated_count):
             f'<script defer src="https://static.cloudflareinsights.com/beacon.min.js" '
             f'data-cf-beacon=\'{{"token": "416a4aded1914f4885983f784d7bec54"}}\'></script>'
             f'</head><body><div class="wrap">'
-            f'<section class="hero"><h1>Developer Morning Brief</h1>'
+            f'<section class="hero"><h1><img class="logo" src="logo.svg" alt=""/>Developer Morning Brief</h1>'
             f'<div class="desc">{now.strftime("%Y년 %m월 %d일 %H:%M")} (Asia/Seoul) 기준</div>'
             f'<div class="briefing"><p>{esc(b1)}</p><p>{esc(b2)}</p><p>{b3}</p></div>'
             f'<div class="chips">{chips}</div></section>'
